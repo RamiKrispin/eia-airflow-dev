@@ -43,7 +43,7 @@ sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions)/g' ${ZDOTDIR:-$HOME}/.
 # !Installing colorls
 # * Required locales
 gem install colorls
-echo "alias ls='colorls -lA --sd'" >> ${ZDOTDIR:-$HOME}/.zshrc 
+echo "alias lc='colorls -lA --sd'" >> ${ZDOTDIR:-$HOME}/.zshrc 
 locale-gen en_US.UTF-8
 
 echo "alias bat=batcat" >> ${ZDOTDIR:-$HOME}/.zshrc 
