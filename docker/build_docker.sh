@@ -2,12 +2,15 @@
 
 # Image settings
 user_name=rkrispin
-image_label=python-dev
-image_tag=0.2.1
+first=Rami
+last=Krispin
+image_label=eia-airflow-dev
+image_tag=0.0.1
 quarto_ver="1.6.39"
-python_ver=3.11
+python_ver=3.10
 venv_name="python-$python_ver-dev"
 ruff_ver="0.8.4"
+airflow_versio="2.10.4"
 dockerfile="Dockerfile"
 # Identify the CPU type (M1 vs Intel)
 if [[ $(uname -m) ==  "aarch64" ]] ; then
@@ -31,8 +34,9 @@ docker build . -f $dockerfile \
                 --build-arg VENV_NAME=$venv_name \
                 --build-arg PYTHON_VER=$python_ver \
                 --build-arg RUFF_VER=$ruff_ver \
-                --build-arg GIT_USER_NAME=$GIT_USER_NAME \
-                --build-arg GIT_USER_EMAIL=$GIT_USER_EMAIL \
+                --build-arg FIRST=$first \
+                --build-arg LAST=$last \
+                --build-arg AIRFLOW_VERSION=$airflow_version \
                 -t $image_name
 
 if [[ $? = 0 ]] ; then
