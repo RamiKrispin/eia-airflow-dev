@@ -1,11 +1,11 @@
 {
     "name": "python-dev",
-    "image": "docker.io/rkrispin/python-dev:arm64.0.2.1",
+    "image": "docker.io/rkrispin/eia-airflow-dev:arm64.0.0.1",
     "customizations": {
         "vscode": {
             "settings": {
-                "python.defaultInterpreterPath": "/opt/python-3.11-dev/bin/python3",
-                "python.selectInterpreter": "/opt/python-3.11-dev/bin/python3"
+                "python.defaultInterpreterPath": "/opt/python-3.10-dev/bin/python3",
+                "python.selectInterpreter": "/opt/python-3.10-dev/bin/python3"
             },
             "extensions": [
                 // Container
@@ -25,6 +25,7 @@
                 "streetsidesoftware.code-spell-checker",
                 "tamasfe.even-better-toml",
                 "aaron-bond.better-comments",
+                "hediet.vscode-drawio",
                 //Code
                 "oderwat.indent-rainbow",
                 // Data

@@ -1,4 +1,7 @@
 {
     "workbench.colorTheme": "Default High Contrast",
-    "workbench.editor.showTabs": "multiple"
+    "workbench.editor.showTabs": "multiple",
+    "editor.fontFamily": "JetBrains Mono",
+    "editor.fontSize": 13,
+    "editor.fontLigatures": true
 }
