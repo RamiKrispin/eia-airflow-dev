@@ -18,6 +18,8 @@ apt-get update && apt-get install -y --no-install-recommends \
    btop \
    bat \
    neofetch \
+   unzip \
+   fontconfig \
    && rm -rf /var/lib/apt/lists/*
 
 # Installing oh my zsh
@@ -39,6 +41,12 @@ git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-m
 
 sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions)/g' ${ZDOTDIR:-$HOME}/.zshrc
 
+# Install fonts
+wget -P ~/.local/share/fonts https://github.com/ryanoasis/nerd-fonts/releases/download/v3.3.0/JetBrainsMono.zip \
+&& cd ~/.local/share/fonts \
+&& unzip JetBrainsMono.zip \
+&& rm JetBrainsMono.zip \
+&& fc-cache -fv
 
 # !Installing colorls
 # * Required locales
@@ -69,6 +77,14 @@ echo "setopt hist_ignore_all_dups" >> ${ZDOTDIR:-$HOME}/.zshrc
 echo "setopt hist_save_no_dups" >> ${ZDOTDIR:-$HOME}/.zshrc
 echo "setopt hist_ignore_dups" >> ${ZDOTDIR:-$HOME}/.zshrc
 echo "alias c=clear" >> ${ZDOTDIR:-$HOME}/.zshrc
+
+
+# Set up powerlevel10k theme
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
+
+sed -i 's#robbyrussell#powerlevel10k/powerlevel10k##g' ${ZDOTDIR:-$HOME}/.zshrc
+
+echo "[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh" >>  ${ZDOTDIR:-$HOME}/.zshrc
 
 echo "neofetch" >> ${ZDOTDIR:-$HOME}/.zshrc
 # TODO

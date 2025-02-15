@@ -1,7 +1,10 @@
 {
     "workbench.colorTheme": "Default High Contrast",
     "workbench.editor.showTabs": "multiple",
-    "editor.fontFamily": "JetBrains Mono",
+    // "editor.fontFamily": "JetBrains Mono",
     "editor.fontSize": 13,
-    "editor.fontLigatures": true
+    "editor.fontLigatures": true,
+    "editor.lineNumbers": "relative",
+    "breadcrumbs.filePath":"on",
+    "breadcrumbs.symbolPath":"on"
 }

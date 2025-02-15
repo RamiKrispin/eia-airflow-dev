@@ -40,11 +40,12 @@
     },
     // Optional, local zsh history:
     "mounts": [
-        "source=${localEnv:HOME}/.zsh_history_dev,target=/root/.zsh_history,type=bind,consistency=cache"
+        "source=${localEnv:HOME}/.zsh_history,target=/root/.zsh_history,type=bind,consistency=cache",
+        "source=${localEnv:HOME}/.p10k.zsh,target=/root/.p10k.zsh,type=bind,consistency=cache"
     ],
     // Optional set environment variables:
     "remoteEnv": {
-        "MY_VAR": "${localEnv:MY_VAR:test_var}"
+        "EIA_API_KEY": "${localEnv:EIA_API_KEY}"
     },
     // Optional load environment variables from a file:
     "runArgs": [

@@ -1,0 +1,338 @@
+---
+title: "EIA API - US48 Demand for Electricity Data Refresh"
+format:
+  html:
+    code-fold: false
+jupyter: python3
+---
+
+
+
+
+## Load Libraries
+
+```{python}
+import eia_api as api
+import eia_data 
+import eia_impute as impute
+import pandas as pd
+import numpy as np
+import requests
+import json
+import os
+import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+from great_tables import GT
+```
+
+## Settings
+
+Load settings:
+```{python}
+raw_json = open("../settings/settings.json")
+meta_json = json.load(raw_json)
+# Prototype version
+# series = pd.DataFrame(meta_json["series_prototype"])
+# Full version
+series = pd.DataFrame(meta_json["series"])
+api_path = meta_json["api_path"]
+meta_path = meta_json["meta_path"]
+data_path = meta_json["data_path"]
+# Should be setting as false during development
+save_data = True
+save_meta = True
+
+eia_api_key = os.getenv('EIA_API_KEY')
+forecast_settings = meta_json["forecast"]
+leaderboard_path = meta_json["backtesting"]["leaderboard_path"]
+```
+
+
+
+```{python}
+
+facets_template = {
+    "parent" : None,
+    "subba" : None
+}
+
+offset = meta_json["refresh"]["offset"]
+```
+
+
+```{python}
+metadata = api.eia_metadata(api_key = eia_api_key, api_path = api_path)
+
+print(metadata.meta.keys())
+print(metadata.meta["startPeriod"])
+print(metadata.meta["endPeriod"])
+```
+
+
+```{python}
+meta_obj = eia_data.get_metadata(api_key = eia_api_key, api_path = api_path, meta_path = meta_path, series = series, offset = 6)
+
+GT(meta_obj.request_meta)
+```
+
+
+
+```{python}
+m = meta_obj.request_meta
+index = meta_obj.last_index + 1
+data = None
+meta_new = None
+
+for i in m.index:
+    facets = facets_template
+    facets["parent"] = m.at[i, "parent"]
+    facets["subba"] = m.at[i, "subba"]
+    start = m.at[i, "request_start"]
+    end = m.at[i, "end"]
+
+    # Case I - new data is available
+    if m.at[i, "updates_available"]:
+        print(m.at[i, "subba"], "- New updates are available, trying to refresh the data")
+        temp = api.eia_backfill(api_key = eia_api_key, 
+            api_path = api_path+ "data", 
+            facets = facets, 
+            start = start.to_pydatetime()- datetime.timedelta(hours = 24),
+            end = end.to_pydatetime() + datetime.timedelta(hours = 24),
+            offset = offset) 
+
+        temp.data = temp.data[(temp.data["period"] <= end.to_pydatetime()) & (temp.data["period"] >= start.to_pydatetime())]
+
+        end_actual = temp.data.period.max()
+        ts_obj = pd.DataFrame(np.arange(start = start, stop = end_actual + datetime.timedelta(hours = 1), step = datetime.timedelta(hours = 1)).astype(datetime.datetime), columns=["index"])
+        ts_obj  = ts_obj.merge(temp.data, left_on = "index", right_on = "period", how="left")
+        ts_obj.drop("period", axis = 1, inplace= True)
+        ts_obj = ts_obj.rename(columns= {"index": "period"})
+    # Case II - new data is not available
+    else:
+        ts_obj = None
+        print("No new data is available")
+
+    meta_temp = eia_data.create_metadata(data = ts_obj, start = start, end = end, type = "refresh")
+    print(meta_temp)
+    meta_temp = pd.DataFrame([meta_temp])
+    # Handling missing values
+    if ts_obj is not None and meta_temp["na"].iloc[0] is not None and meta_temp["na"].iloc[0] >= 0:
+        print(meta_temp)
+        missing_index = ts_obj.value.isnull()
+        ts_obj.loc[missing_index, "subba"] = meta_temp["subba"].iloc[0]
+        ts_obj.loc[missing_index, "parent"] = meta_temp["parent"].iloc[0]
+        ts = impute.impute_series(series= ts_obj, metadata =meta_temp)
+        ts_obj = ts.data
+        meta_temp = ts.metadata
+
+
+
+    if ts_obj is None:
+        meta_temp["parent"].iloc[0] =  m.at[i, "parent"]
+        meta_temp["subba"].iloc[0] =  m.at[i, "subba"]
+    # Append the data if the refresh was successful
+    if meta_temp["success"].iloc[0] and meta_temp["update"].iloc[0]:
+        print("Append the new data")
+        d = eia_data.append_data(data_path = data_path, new_data = ts_obj, save = save_data)
+        meta_temp["update"].iloc[0] = True
+    elif not meta_temp["success"].iloc[0]:
+        meta_temp["update"].iloc[0] = False
+        meta_temp["comments"].iloc[0] = meta_temp["comments"].iloc[0] + "The data refresh failed, please check the log; "
+
+
+    if data is None:
+        data = ts_obj
+    else:
+        data = data._append(ts_obj)
+
+    if meta_new is None:
+        meta_new = meta_temp
+    else:
+        meta_new = meta_new._append(meta_temp)
+meta_new.reset_index(drop=True, inplace=True)
+```
+
+```{python}
+GT(meta_new,rowname_col = "index")
+```
+
+
+
+```{python}
+meta_updated = eia_data.append_metadata(meta_path = meta_path, meta = meta_new, save = save_meta, init = False)
+
+GT(meta_updated)
+```
+
+
+### Plot the Series
+
+We will use Plotly to visualize the series:
+
+```{python}
+
+if data is not None:
+    input = data.sort_values(by = ["subba", "period"])
+    p = px.line(input, x="period", y="value", color="subba")
+    p.show()
+else: 
+    input = None
+    print("No new data is available")
+```
+
+
+
+## Forecast Refresh
+
+Reload the data:
+```{python}
+df = pd.read_csv(data_path)
+ts = df[["period", "subba", "y"]].copy()
+ts["ds"] = pd.to_datetime(ts["period"])
+ts = ts[["ds", "subba", "y"]]
+ts = ts.rename(columns={"subba":"unique_id"})
+```
+
+Check if new data is available and update the forecast:
+
+```{python}
+forecast_log = pd.read_csv(forecast_settings["forecast_log_path"])
+forecast_log = pd.read_csv(forecast_settings["forecast_log_path"])
+forecast_log["end"] = pd.to_datetime(forecast_log["end"])
+models_list = pd.read_csv(leaderboard_path)
+
+forecast_new = None
+forecast_log_new = None
+for i in forecast_log["unique_id"].unique():
+    end_fc = forecast_log[forecast_log["unique_id"] == i]["end"].max()
+    d = ts[ts["unique_id"] == i]
+    end_filter = d["ds"].max().floor(freq = "d") - datetime.timedelta(hours = 1)
+    if end_filter > end_fc:
+        print("New data points are available to series:", i, "refresh the forecast")
+        input = d[d["ds"] <= end_filter]
+        label = models_list[models_list["unique_id"] == i]["label"][0]
+        model = models_list[models_list["unique_id"] == i]["model"][0]
+        m = models_settings[label].copy()
+        m["args"]["models"] = [model + "()"]
+        if m["type"] == "mlforecast":
+            args = m["args"]
+            print(args)
+            if "lags" not in args.keys():
+                args["lags"] = None
+            if "date_features" not in args.keys():
+                args["date_features"] = None
+            if "target_transforms" not in args.keys():
+                args["target_transforms"] = None
+            
+            forecast_utils.models_reformat(args["models"])
+            
+            mlf = MLForecast(
+                models =args["models"], 
+                freq= args["freq"],
+                date_features = args["date_features"],
+                target_transforms= args["target_transforms"],
+                lags = args["lags"])
+            
+            mlf.fit(df = input,  fitted=True, 
+                    prediction_intervals = PredictionIntervals(n_windows = forecast_settings["prediction_intervals"]["n_windows"], h = forecast_settings["prediction_intervals"]["h"], 
+                    method = forecast_settings["prediction_intervals"]["method"] ))
+            fc_raw = None
+            fc = None
+            fc_raw = mlf.predict(forecast_settings["h"], 
+            level  = [forecast_settings["prediction_intervals"]["level"]])
+            fc = forecast_utils.fc_to_long(fc = fc_raw, models = args["models"], level = forecast_settings["prediction_intervals"]["level"])
+            fc["label"] = label
+            forecast_label = str(t.date().strftime("%Y-%m-%d"))
+            fc["forecast_label"] = forecast_label
+
+            if fc is not None and len(fc) > 0:
+                fc_log = {
+                    "unique_id": id,
+                    "model": model,
+                    "label": label,
+                    "forecast_label": forecast_label,
+                    "start": fc["ds"].min(),
+                    "end": fc["ds"].max(),
+                    "n_obs": len(fc),
+                    "h": forecast_settings["h"],
+                    "refresh_time": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                }
+                if fc_log["n_obs"] == fc_log["h"]:
+                    fc_log["success"] = True
+                else:
+                    fc_log["success"] = False
+            else:
+                fc_log = {
+                    "unique_id": id,
+                    "model": model,
+                    "label": forecast_label,
+                    "forecast_label": forecast_label
+                    }
+                fc_log["start"] = None
+                fc_log["end"] = None
+                fc_log["n_obs"] = None
+                fc_log["h"] = forecast_settings["h"]
+                fc_log["refresh_time"] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                fc_log["success"] = False
+            fc_log["mape"] = None
+            fc_log["rmse"] = None
+            fc_log["coverage"] = None
+            fc_log["score"] = False
+
+            if forecast_log is None:
+                forecast_log = pd.DataFrame([fc_log])
+            else:
+                forecast_log = pd.concat([forecast_log, pd.DataFrame([fc_log])])    
+
+            if forecast is None:
+                forecast = fc
+            else:
+                forecast = pd.concat([forecast, fc])
+
+if forecast_new is not None:
+    forecast_new = forecast_new.sort_values(by = ["forecast_label", "unique_id"])
+    forecast_new.reset_index(drop=True, inplace=True)
+
+    forecast_log_new = forecast_log_new.sort_values(by = ["forecast_label", "unique_id"])
+    forecast_log_new.reset_index(drop=True, inplace=True)
+
+    forecast_new.to_csv(forecast_settings["forecast_path"], index = False)
+    forecast_log_new.to_csv(forecast_settings["forecast_log_path"], index = False)
+
+```
+        
+
+
+
+
+```{python}
+forecast_log = pd.read_csv(forecast_settings["forecast_log_path"])
+update = False
+if any(forecast_log["score"] == False):
+    forecast_log["end"] = pd.to_datetime(forecast_log["end"])
+    forecast = pd.read_csv(forecast_settings["forecast_path"])
+    forecast["ds"] = pd.to_datetime(forecast["ds"])
+
+    for index, row in forecast_log.iterrows():
+        id = row["unique_id"]
+        forecast_label = row["forecast_label"]
+
+        fc = forecast[(forecast["forecast_label"] == forecast_label) & (forecast["unique_id"] == id)]
+
+        fc = fc.merge(ts, left_on = ["unique_id", "ds"], right_on = ["unique_id", "ds"], how="left")
+        forecast_log.at[index, "mape"] = forecast_utils.mape(y = fc["y"], yhat = fc["forecast"])
+        forecast_log.at[index,"rmse"] = forecast_utils.rmse(y = fc["y"], yhat = fc["forecast"])
+        forecast_log.at[index, "coverage"] =  forecast_utils.coverage(y = fc["y"], lower = fc["lower"], upper = fc["upper"])
+        if len(fc) == row["h"]:
+            forecast_log.at[index,"score"] = True
+        update = True
+
+if update:
+    forecast_log.to_csv(forecast_settings["forecast_log_path"], index = False)
+
+GT(forecast_log)
+```
+
+
+
