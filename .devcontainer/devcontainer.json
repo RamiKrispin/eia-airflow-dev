@@ -34,7 +34,9 @@
                 // Git
                 "mhutchie.git-graph",
                 // Misc
-                "streetsidesoftware.code-spell-checker"
+                "streetsidesoftware.code-spell-checker",
+                // Code generator
+                "github.copilot"
             ]
         }
     },

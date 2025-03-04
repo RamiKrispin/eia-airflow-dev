@@ -5,7 +5,9 @@ mlflavors==0.1.0
 requests==2.32.3
 plotly==5.23.0
 plotly-express==0.4.1
+narwhals==1.28.0
 great_tables==0.16.1
+pointblank==0.6.1
 ipywidgets
 jupyter 
 apache-airflow==2.10.4

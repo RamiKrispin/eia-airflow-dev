@@ -1,0 +1,180 @@
+---
+title: "EIA API - US48 Demand for Electricity Data Refresh"
+format:
+  html:
+    code-fold: false
+jupyter: python3
+---
+
+The following notebook provides a prototype for the data pipeline. 
+
+## Steps
+The data refresh includes the following steps:
+
+- Load the log 
+- Pull metadata from the API
+- Identify if new data is available
+- Pull new data
+- Test and validate the new data
+- Append new data
+- Log the process
+
+
+Each component should wared as a script or function and turn into a step in the Airflow DAG.
+
+
+## Import Libraries
+```{python}
+import pointblank as pb
+import great_tables as gt
+import pandas as pd
+import etl.eia_api as ea
+import etl.eia_etl as ee
+import numpy as np
+import requests
+import json
+import os
+import datetime
+```
+
+## Settings
+
+```{python}
+settings_path = "./settings/settings.json"
+save_data = False
+save_meta = False
+api_key = os.getenv('EIA_API_KEY')
+```
+
+## Load the Metadata
+
+Load the settings file:
+
+```{python}
+raw_json = open(settings_path)
+settings = json.load(raw_json)
+```
+
+Parse the api and data settings:
+```{python}
+api_data_path = settings["api"]["api_data_path"]
+api_meta_path = settings["api"]["api_meta_path"]
+facets = settings["api"]["facets"]
+facets_df = pd.DataFrame([facets])
+data_path = settings["data"]["data_path"]
+meta_path = settings["data"]["log_path"]
+offset = settings["data"]["offset"]
+window = settings["data"]["window"]
+```
+
+Load the metadata
+```{python}
+meta = ee.get_metadata(api_key = api_key, api_path = api_meta_path, meta_path= meta_path, facets = facets_df, offset = offset, window = window)
+```
+
+Check the refresh status:
+
+```{python}
+meta.updates_available
+```
+
+## Data refresh
+
+
+```{python}
+get = ea.eia_get(api_key=api_key, 
+api_path=api_data_path, 
+data = "value", 
+facets = facets, 
+start = meta.local_end, 
+end = meta.api_end_offset)
+```
+
+
+## Data validation
+
+Set the table schema:
+
+```{python}
+schema = pb.Schema(
+    columns=[
+        ("period", "datetime64[ns]"),   
+        ("respondent", "object"),
+        ("respondent-name", "object"),
+        ("type", "object"),
+        ("type-name", "object"),
+        ("value", "int64"),
+        ("value-units", "object")
+    ]
+)
+```
+
+Data validation:
+
+```{python}
+test = ee.Validation(data = get.data,  
+tbl_name= "get request",
+label = "validation",
+parameters=get.parameters,
+warning=0.10, 
+error=0, 
+critical=0)
+
+test.add_schema(schema = schema)
+
+test.validate()
+
+test.create_log(log_path= meta_path, facets = facets_df)
+```
+
+
+```{python}
+validation = (
+  pb.Validate(data = get.data,
+  tbl_name= "get request",
+  label = "validation",
+  thresholds=pb.Thresholds(warning=0.10, error=0, critical=0))
+  .col_exists(columns=["period", "respondent", "respondent-name", "type", "type-name", "value", "value-units"]) 
+  .col_schema_match(schema=schema)
+  .col_vals_gt(columns="value", value=0)
+  .col_count_match(count=7) 
+  .col_vals_in_set(columns="respondent", set = ["US48"])
+  .col_vals_in_set(columns="type", set = ["D"])
+  .col_vals_not_null(columns= ["period","value"])
+  .rows_distinct() 
+  .interrogate()
+)
+
+validation
+```
+
+Check if the validation was successful:
+
+```{python}
+print(validation.all_passed())
+```
+
+
+```{python}
+data = get.data[["period", "respondent", "type", "value-units", "value"]].rename(columns= {"period":"index", })
+
+data.head()
+```
+
+Check the data timestamp:
+
+```{python}
+meta_df = ee.load_metadata(path = meta_path, facets = facets_df)
+```
+
+
+Update the metadata
+
+
+
+Validate the start and end is matching
+
+
+
+Append the data to the dataset
+

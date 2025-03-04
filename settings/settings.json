@@ -1,6 +1,7 @@
 {
     "api": {
-        "api_path": "electricity/rto/region-data/data",
+        "api_data_path": "electricity/rto/region-data/data",
+        "api_meta_path" : "electricity/rto/region-data/?data[]=value",
         "facets": {
             "respondent": "US48",
             "type": "D"
@@ -24,7 +25,8 @@
     "data": {
         "data_path": "./data/us48.csv",
         "log_path": "./data/us48_metadata.csv",
-        "backtesting_path": "./data/us48_backtesting.csv"
+        "offset": 12,
+        "window": 336
     },
     "backtesting": {
         "settings": {
