@@ -147,8 +147,11 @@ def eia_get(api_key,
             elif isinstance(value, str):
                 fc += f"&facets[{key}][]={value}"
 
-    s = f"&start={start.strftime('%Y-%m-%d')}" if isinstance(start, datetime.date) else f"&start={start.strftime('%Y-%m-%dT%H')}" if isinstance(start, datetime.datetime) else ""
-    e = f"&end={end.strftime('%Y-%m-%d')}" if isinstance(end, datetime.date) else f"&end={end.strftime('%Y-%m-%dT%H')}" if isinstance(end, datetime.datetime) else ""
+    start_temp = start - datetime.timedelta(days = 1) 
+    end_temp = end + datetime.timedelta(days = 1)
+
+    s = f"&start={start_temp.strftime('%Y-%m-%d')}" if isinstance(start_temp, datetime.date) else f"&start={start_temp.strftime('%Y-%m-%dT%H')}" if isinstance(start_temp, datetime.datetime) else ""
+    e = f"&end={end_temp.strftime('%Y-%m-%d')}" if isinstance(end_temp, datetime.date) else f"&end={end_temp.strftime('%Y-%m-%dT%H')}" if isinstance(end_temp, datetime.datetime) else ""
     l = f"&length={length}" if length else ""
     o = f"&offset={offset}" if offset else ""
     fr = f"&frequency={frequency}" if frequency else ""
@@ -161,13 +164,14 @@ def eia_get(api_key,
 
     df = pd.DataFrame(data['response']['data'])
     if not df.empty:
-        df["period"] = pd.to_datetime(df["period"])
+        df = df.rename(columns={"period": "index"})
+        df["index"] = pd.to_datetime(df["index"])
         df["value"] = pd.to_numeric(df["value"])
-        df = df.sort_values(by=["period"])
+        df = df.sort_values(by=["index"])
         if start and isinstance(start, (datetime.date, datetime.datetime)):
-            df = df[df["period"] >= start]
+            df = df[df["index"] >= start]
         if end and isinstance(end, (datetime.date, datetime.datetime)):
-            df = df[df["period"] <= end]
+            df = df[df["index"] <= end]
         status = True
     else:
         status = False
