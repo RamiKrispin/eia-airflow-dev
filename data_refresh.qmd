@@ -25,25 +25,31 @@ Each component should wared as a script or function and turn into a step in the 
 
 ## Import Libraries
 ```{python}
+#| label: Load libraries
 import pointblank as pb
 import great_tables as gt
 import pandas as pd
 import etl.eia_api as ea
 import etl.eia_etl as ee
+import etl.callable as cl
+import etl.settings as settings
 import numpy as np
 import requests
 import json
 import os
 import datetime
+import plotly.express as px
 ```
 
 ## Settings
 
 ```{python}
+#| label: Load settings
 settings_path = "./settings/settings.json"
-save_data = False
-save_meta = False
-api_key = os.getenv('EIA_API_KEY')
+save_data = True
+save_log = True
+api_key_var = "EIA_API_KEY"
+api_key = os.getenv(api_key_var)
 ```
 
 ## Load the Metadata
@@ -51,54 +57,87 @@ api_key = os.getenv('EIA_API_KEY')
 Load the settings file:
 
 ```{python}
+parameters = settings.Settings()
+parameters.load_settings(path = settings_path)
+parameters.load_api_key(var = "EIA_API_KEY")
+```
+
+
+
+```{python}
+#| label: Load metadata 
 raw_json = open(settings_path)
 settings = json.load(raw_json)
 ```
 
 Parse the api and data settings:
 ```{python}
+#| label: Parse metadata
 api_data_path = settings["api"]["api_data_path"]
 api_meta_path = settings["api"]["api_meta_path"]
+data_validation_path = settings["data"]["data_validation_path"]
 facets = settings["api"]["facets"]
 facets_df = pd.DataFrame([facets])
 data_path = settings["data"]["data_path"]
-meta_path = settings["data"]["log_path"]
+log_path = settings["data"]["log_path"]
 offset = settings["data"]["offset"]
 window = settings["data"]["window"]
 ```
 
 Load the metadata
 ```{python}
-meta = ee.get_metadata(api_key = api_key, api_path = api_meta_path, meta_path= meta_path, facets = facets_df, offset = offset, window = window)
+#| label: Pull metadata
+meta = ee.get_metadata(api_key = parameters.api_key,
+api_path = parameters.api_meta_path, 
+meta_path= parameters.log_path, facets = 
+parameters.facets, 
+offset = parameters.offset, 
+window = parameters.window)
 ```
 
 Check the refresh status:
 
 ```{python}
+#| label: Updates available
 meta.updates_available
 ```
 
 ## Data refresh
 
-
 ```{python}
-get = ea.eia_get(api_key=api_key, 
-api_path=api_data_path, 
-data = "value", 
-facets = facets, 
-start = meta.local_end, 
-end = meta.api_end_offset)
+#| label: Initiate log
+data_log = ee.Log()
+data_log.create_log(facets = facets)
 ```
 
+```{python}
+#| label: No updates
+if not meta.updates_available:
+  data_log.no_updates()
+```
+
+If data is available:
+
+```{python}
+if meta.updates_available:
+#| label: Pulling data
+  get = ea.eia_get(api_key=parameters.api_key, 
+    api_path=parameters.api_data_path, 
+    data = "value", 
+    facets = parameters.facets, 
+    start = meta.start, 
+    end = meta.api_end_offset)
+```
 
 ## Data validation
 
 Set the table schema:
 
 ```{python}
-schema = pb.Schema(
+#| label: Set schema_refresh
+schema_refresh = pb.Schema(
     columns=[
-        ("period", "datetime64[ns]"),   
+        ("index", "datetime64[ns]"),   
         ("respondent", "object"),
         ("respondent-name", "object"),
         ("type", "object"),
@@ -112,69 +151,76 @@ schema = pb.Schema(
 Data validation:
 
 ```{python}
-test = ee.Validation(data = get.data,  
-tbl_name= "get request",
-label = "validation",
-parameters=get.parameters,
-warning=0.10, 
-error=0, 
-critical=0)
-
-test.add_schema(schema = schema)
-
-test.validate()
-
-test.create_log(log_path= meta_path, facets = facets_df)
-```
-
-
-```{python}
-validation = (
-  pb.Validate(data = get.data,
+#| label: Data validation
+if meta.updates_available:
+  test = ee.Validation(data = get.data,  
   tbl_name= "get request",
   label = "validation",
-  thresholds=pb.Thresholds(warning=0.10, error=0, critical=0))
-  .col_exists(columns=["period", "respondent", "respondent-name", "type", "type-name", "value", "value-units"]) 
-  .col_schema_match(schema=schema)
-  .col_vals_gt(columns="value", value=0)
-  .col_count_match(count=7) 
-  .col_vals_in_set(columns="respondent", set = ["US48"])
-  .col_vals_in_set(columns="type", set = ["D"])
-  .col_vals_not_null(columns= ["period","value"])
-  .rows_distinct() 
-  .interrogate()
+  parameters=get.parameters,
+  initial= False,
+  warning=0.10, 
+  error=0, 
+  critical=0)
+
+  test.add_schema(schema = schema_refresh)
+
+  test.validate()
+```
+
+
+```{python}
+if meta.updates_available:
+  test.validation
+```
+
+```{python}
+if meta.updates_available:
+  data_log.add_validation(validation=test)
+```
+
+```{python}
+data_log.log
+```
+
+
+```{python}
+#| label: Set schema_append
+schema_append = pb.Schema(
+    columns=[
+        ("index", "datetime64[ns]"),   
+        ("respondent", "object"),
+        ("type", "object"),
+        ("value", "int64"),
+        ("value-units", "object")
+    ]
 )
-
-validation
 ```
-
-Check if the validation was successful:
 
 ```{python}
-print(validation.all_passed())
-```
+#| label: Append data
+if data_log.log["status"]:
+  print("Appending the data")
+  df = ee.AppendData()
+  df.append_data(data_path = data_path, new_data = get.data, schema = schema_append, parameters = get.parameters, save = save_data)
+  print(df.validation)
+  if df.status and df.save:
+    data_log.log["update"] = True
+  else:
+    data_log.log["update"] = False
+  p = px.line(df.new_data, x="index", y="value")
+  p.show()
+else:
+  print("Could not append the data, please check the log")
 
+```
 
 ```{python}
-data = get.data[["period", "respondent", "type", "value-units", "value"]].rename(columns= {"period":"index", })
-
-data.head()
+log = ee.AppendLog()
+log.append_log(log_path = log_path, new_log = data_log.log, save = save_log)
+print(log.log)
 ```
 
-Check the data timestamp:
-
-```{python}
-meta_df = ee.load_metadata(path = meta_path, facets = facets_df)
-```
-
-
-Update the metadata
-
-
-
-Validate the start and end is matching
-
-
-
-Append the data to the dataset
+TODOs
+- Check the start argument
+- Add condition start < end
 

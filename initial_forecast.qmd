@@ -1,0 +1,109 @@
+---
+title: "EIA API - US48 Demand for Electricity Initial Forecast"
+format:
+  html:
+    code-fold: false
+jupyter: python3
+---
+
+
+Load Libraries
+```{python}
+import pandas as pd
+import json
+import datetime
+from mlforecast import MLForecast
+from mlforecast.target_transforms import Differences
+from mlforecast.utils import PredictionIntervals
+from window_ops.expanding import expanding_mean
+from lightgbm import LGBMRegressor
+from utilsforecast.plotting import plot_series
+from statistics import mean
+```
+
+Load Settings
+
+```{python}
+settings_path = "./settings/settings.json"
+save = False
+
+raw_json = open(settings_path)
+settings = json.load(raw_json)
+```
+
+
+```{python}
+forecast_model = settings["forecast"]["model1"]
+data_path = settings["data"]["data_path"]
+```
+Load Data
+
+```{python}
+df = pd.read_csv(data_path)
+df["index"] = pd.to_datetime(df["index"])
+
+last_timestamp = df["index"].max().floor("D") - datetime.timedelta(hours = 24)
+
+ts = df[df["index"] < last_timestamp]
+ts = ts.sort_values(by = "index")
+ts = ts.rename(columns={"index": "ds", "respondent":"unique_id", "value": "y"})
+ts = ts[["ds", "unique_id", "y"]]
+ts.tail()
+
+```
+
+
+
+Model Parameters
+```{python}
+model = eval(forecast_model["args"]["models"][0])
+args = forecast_model["args"]
+if "lags" not in args.keys():
+    args["lags"] = None
+if "date_features" not in args.keys():
+    args["date_features"] = None
+if "target_transforms" not in args.keys():
+    args["target_transforms"] = None
+
+h = settings["forecast"]["settings"]["h"] 
+pi = settings["forecast"]["settings"]["prediction_intervals"]
+forecast_path = settings["forecast"]["settings"]["forecast_path"]
+forecast_log_path = settings["forecast"]["settings"]["forecast_log_path"]
+
+
+```
+
+
+Create a Forecast Object
+```{python}
+mlf = MLForecast(
+    models =model, 
+    freq= args["freq"],
+    date_features = args["date_features"],
+    target_transforms= args["target_transforms"],
+    lags = args["lags"])
+```
+
+
+
+```{python}
+mlf.fit(df = ts, 
+    fitted=True, 
+    prediction_intervals = PredictionIntervals(n_windows = pi["n_windows"], 
+    h = h,
+    method = pi["method"]))
+
+
+```
+
+
+```{python}
+fc = mlf.predict(h = h, 
+            level  =[pi["level"]])
+```
+
+
+
+```{python}
+fc.head()
+```
