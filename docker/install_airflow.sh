@@ -20,5 +20,8 @@ airflow users create \
     --password $PASSWORD \
     --email $EMAIL
 
-# airflow webserver --port 8080
+
+sed -i 's@dags_folder = /airflow/dags@dags_folder = /workspaces/eia-airflow-dev/dags@g' /airflow/airflow.cfg
+
 # airflow scheduler
+# airflow webserver --port 8080

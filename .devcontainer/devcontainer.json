@@ -1,6 +1,6 @@
 {
     "name": "python-dev",
-    "image": "docker.io/rkrispin/eia-airflow-dev:arm64.0.0.1",
+    "image": "docker.io/rkrispin/eia-airflow-dev:arm64.0.0.2",
     "customizations": {
         "vscode": {
             "settings": {
@@ -35,6 +35,7 @@
                 "mhutchie.git-graph",
                 // Misc
                 "streetsidesoftware.code-spell-checker",
+                "adpyke.codesnap",
                 // Code generator
                 "github.copilot"
             ]
