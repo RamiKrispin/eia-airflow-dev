@@ -12,6 +12,7 @@ Load Libraries
 import pandas as pd
 import json
 import datetime
+import pointblank as pb
 from mlforecast import MLForecast
 from mlforecast.target_transforms import Differences
 from mlforecast.utils import PredictionIntervals
@@ -19,13 +20,16 @@ from window_ops.expanding import expanding_mean
 from lightgbm import LGBMRegressor
 from utilsforecast.plotting import plot_series
 from statistics import mean
+import etl.forecast_utils as fu
+import etl.callable as cl
 ```
 
 Load Settings
 
 ```{python}
 settings_path = "./settings/settings.json"
-save = False
+save = True
+initial = True
 
 raw_json = open(settings_path)
 settings = json.load(raw_json)
@@ -33,8 +37,11 @@ settings = json.load(raw_json)
 
 
 ```{python}
-forecast_model = settings["forecast"]["model1"]
+forecast_model = settings["forecast"]["model"]
+fc_path = settings["forecast"]["settings"]["forecast_path"]
+fc_log_path = settings["forecast"]["settings"]["forecast_log_path"]
 data_path = settings["data"]["data_path"]
+unique_id = settings["api"]["facets"]["respondent"]
 ```
 Load Data
 
@@ -42,7 +49,7 @@ Load Data
 df = pd.read_csv(data_path)
 df["index"] = pd.to_datetime(df["index"])
 
-last_timestamp = df["index"].max().floor("D") - datetime.timedelta(hours = 24)
+last_timestamp = df["index"].max().floor("D") - datetime.timedelta(hours = 24*6)
 
 ts = df[df["index"] < last_timestamp]
 ts = ts.sort_values(by = "index")
@@ -56,7 +63,13 @@ ts.tail()
 
 Model Parameters
 ```{python}
-model = eval(forecast_model["args"]["models"][0])
+model_obj = eval(forecast_model["args"]["models"][0])
+model_label = forecast_model["label"]
+
+model = {
+    model_label: model_obj
+}
+
 args = forecast_model["args"]
 if "lags" not in args.keys():
     args["lags"] = None
@@ -74,36 +87,28 @@ forecast_log_path = settings["forecast"]["settings"]["forecast_log_path"]
 ```
 
 
-Create a Forecast Object
 ```{python}
-mlf = MLForecast(
-    models =model, 
-    freq= args["freq"],
-    date_features = args["date_features"],
-    target_transforms= args["target_transforms"],
-    lags = args["lags"])
+forecast_schema = pb.Schema(
+    columns=[
+        ("unique_id", "object"),
+        ("ds", "datetime64[ns]"),   
+        ("model_label", "object"),
+        ("forecast", "float64"),
+        ("lower", "float64"),
+        ("upper", "float64"),
+        ("forecast_label", "object")
+    ]
+)
+```
+
+```{python}
+cl.forecast_refresh(settings_path = settings_path, schema = forecast_schema, save = True, initial=True, start= datetime.datetime(2025, 4, 1, 0, 0, 0))
 ```
 
 
+## Score Forecast
 
 ```{python}
-mlf.fit(df = ts, 
-    fitted=True, 
-    prediction_intervals = PredictionIntervals(n_windows = pi["n_windows"], 
-    h = h,
-    method = pi["method"]))
-
-
+cl.score(settings_path=settings_path, save = save)
 ```
 
-
-```{python}
-fc = mlf.predict(h = h, 
-            level  =[pi["level"]])
-```
-
-
-
-```{python}
-fc.head()
-```
