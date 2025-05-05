@@ -79,7 +79,7 @@ data_validation_path = settings["data"]["data_validation_path"]
 facets = settings["api"]["facets"]
 facets_df = pd.DataFrame([facets])
 data_path = settings["data"]["data_path"]
-log_path = settings["data"]["log_path"]
+log_path = settings["data"]["data_log_path"]
 offset = settings["data"]["offset"]
 window = settings["data"]["window"]
 ```
