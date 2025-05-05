@@ -73,7 +73,7 @@ end = datetime.datetime(e["year"], e["month"], e["day"], e["hour"])
 
 offset = meta_json["backfill"]["offset"]
 data_path = meta_json["data"]["data_path"]
-log_path = meta_json["data"]["log_path"]
+log_path = meta_json["data"]["data_log_path"]
 ```
 
 
@@ -211,7 +211,7 @@ p.show()
 
 ```{python}
 #| label: Subset the data
-df = ts_obj[["index", "respondent", "type", "value", "value-units", "y"]]
+df = ts_obj[["index", "respondent", "type", "value", "value-units"]]
 ```
 
 ### Create Log and Check for Missing values
