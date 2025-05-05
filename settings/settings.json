@@ -17,14 +17,14 @@
         },
         "end": {
             "year": 2025,
-            "month": 1,
-            "day": 1,
+            "month": 4,
+            "day": 10,
             "hour": 0
         }
     },
     "data": {
         "data_path": "./data/us48.csv",
-        "log_path": "./data/us48_metadata.csv",
+        "data_log_path": "./data/us48_metadata.csv",
         "data_validation_path": "./data/us48_validation.csv",
         "offset": 22,
         "window": 336
@@ -110,18 +110,19 @@
     },
     "forecast":{
         "settings": {
-            "forecast_path": "../data/forecast.csv",
-            "forecast_log_path": "../data/forecast_log.csv",
-            "h": 24,
+            "forecast_path": "./data/us48_forecast.csv",
+            "forecast_log_path": "./data/us48_forecast_log.csv",
+            "h": 72,
+            "refresh": 24,
             "prediction_intervals": {
                 "n_windows": 5,
-                "h": 24,
+                "h": 72,
                 "method": "conformal_distribution",
                 "level": 95
             }
         },
-        "model1": {
-        "label": "model1",
+        "model": {
+        "label": "lightgbm",
         "type": "mlforecast",
         "args": {
             "models": [
