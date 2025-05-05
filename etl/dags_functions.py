@@ -176,7 +176,7 @@ class Settings:
             self.api_meta_path = settings["api"]["api_meta_path"]
             self.facets = settings["api"]["facets"]
             self.data_path = settings["data"]["data_path"]
-            self.log_path = settings["data"]["log_path"]
+            self.log_path = settings["data"]["data_log_path"]
             self.offset = settings["data"]["offset"]
             self.window = settings["data"]["window"]
             self.data_validation_path = settings["data"]["data_validation_path"]

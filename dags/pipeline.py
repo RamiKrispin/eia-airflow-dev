@@ -3,52 +3,32 @@ sys.path.append("/workspaces/eia-airflow-dev")
 
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.python_operator import PythonOperator, BranchPythonOperator
-from callable.check_updates import CheckUpdates, HelloWorld, DataRefresh
+from airflow.operators.python import PythonOperator, BranchPythonOperator
 import etl.eia_etl as ee
 import etl.callable as cl
 import os
+import json
+import pointblank as pb
 
 # Settings
 settings_path = "./settings/settings.json"
 api_key_var = "EIA_API_KEY"
 os.environ["settings_path"] =  "./settings/settings.json"
+raw_json = open(settings_path)
+settings = json.load(raw_json)
+save = True
 
-def update_status(**context):
-    parameters = context['ti'].xcom_pull(task_ids='check_api')
-    print(parameters)
-    if parameters["updates_available"] == "True":
-        return "updates_available"
-    else:
-        return "no_updates"
-
-def print_env_var():
-    print(os.environ["settings_path"])
-    print(os.environ["EIA_API_KEY"])
-    
-def process_json_data(path, var, **context):
-    # Access the returned JSON data from XCom
-    parameters = context['ti'].xcom_pull(task_ids='check_updates')
-    print(type(parameters))
-    print(parameters)
-    data_log = ee.Log()
-    data_log.create_log(facets = parameters["facets"])
-    if parameters["updates_available"] == "True":
-        print("Data is available.")
-        print(parameters["start"])
-        data = DataRefresh()
-        data.refresh_data(parameters = parameters)
-        data.data_validation()
-        if data.validation.all_passed():
-            print("Data is valid.")
-            data_log.add_validation(validation = data.validation)
-            print(data_log.log)
-            
-        
-    else:
-        print("No data available.")
-    
-
+forecast_schema = pb.Schema(
+    columns=[
+        ("unique_id", "object"),
+        ("ds", "datetime64[ns]"),   
+        ("model_label", "object"),
+        ("forecast", "float64"),
+        ("lower", "float64"),
+        ("upper", "float64"),
+        ("forecast_label", "object")
+    ]
+)
 
 default_args = {
     'owner': 'airflow',
@@ -65,8 +45,8 @@ with DAG(
     'data_pipeline',
     default_args=default_args,
     description='Data pipeline for ETL process',
-    schedule_interval=None,
-    tags = ["python1", "test1"]
+    schedule_interval='@daily',
+    tags = ["python", "etl", "forecast"]
 ) as dag:
     check_api = PythonOperator(
         task_id='check_api',
@@ -88,7 +68,7 @@ with DAG(
         task_id='no_updates',
         python_callable=cl.no_updates,
         provide_context=True,
-        op_kwargs={"save": True}
+        op_kwargs={"save": save}
         )
     data_validation =  PythonOperator(
         task_id='data_validation',
@@ -104,7 +84,7 @@ with DAG(
         task_id='data_valid',
         python_callable=cl.data_valid,
         provide_context=True,
-        op_kwargs={"save": True}
+        op_kwargs={"save": save}
         )
     data_invalid = PythonOperator(
         task_id='data_invalid',
@@ -116,6 +96,23 @@ with DAG(
         python_callable=cl.data_invalid,
         provide_context=True
         )
+    forecast_refresh = PythonOperator(
+        task_id='forecast_refresh',
+        python_callable=cl.forecast_refresh,
+        provide_context=True,
+        op_kwargs= {"settings_path": settings_path,
+                    "schema": forecast_schema,
+                    "save": True,
+                    "initial": False}
+        )
+    forecast_score = PythonOperator(
+        task_id='forecast_score',
+        python_callable=cl.score,
+        op_kwargs= {"settings_path": settings_path,
+                    "save": save},
+        provide_context=True
+        )
 check_api >> check_status >> [data_refresh, no_updates]
 data_refresh >> [data_validation,failure] 
 data_validation >> check_validation >> [data_valid, data_invalid]
+data_valid >> forecast_refresh >> forecast_score

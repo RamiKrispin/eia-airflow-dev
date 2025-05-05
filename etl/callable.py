@@ -1,4 +1,5 @@
 import etl.dags_functions as df
+import etl.forecast_utils as fu
 import etl.eia_etl as ee
 import pandas as pd
 import pointblank as pb
@@ -157,3 +158,43 @@ def data_valid(save, **context):
 
     
 
+def forecast_refresh(settings_path, schema, save, initial, start = None):
+    fc_settings = fu.FcSettings()
+    fc_settings.get_forecast_settings(settings_path=settings_path)
+    s = fc_settings.settings
+    f = fu.RefreshForecast()
+    f.check_status(settings_path=settings_path, initial=initial, start=start)
+    if f.status:
+        print("New data is available to refresh the forecast")
+        f.refresh_forecast()
+        f.reformat_forecast()
+        f.add_schema(schema = schema)
+        f.forecast_validation()
+        log = f.validation.log
+        if f.validation.log["status"]:
+            af = fu.AppendForecast()
+            af.append_forecast(settings_path = settings_path, 
+                               new_fc = f.forecast, 
+                               schema = schema,save = save, 
+                               initial= initial)
+            if af.save:
+                if af.status:
+                    log["update"] = True
+                else:
+                    log["update"] = False
+                    log["comments"] = "Failed to append the forecast, please check the validation log"
+                al = fu.AppendFcLog()
+                al.append_log(settings_path = settings_path, new_log = log, save = save, initial = initial)   
+            else:
+                print("The save argument was set to False, skipping the log process")
+        print(log)
+        return True
+    else:
+        print("No new data is available to refresh the forecast")
+        return False
+
+
+def score(settings_path, save=False):
+    log = fu.score_forecast(settings_path = settings_path, save = save)
+    print(log)
+    return True
