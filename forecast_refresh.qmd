@@ -1,0 +1,155 @@
+---
+title: "EIA API - US48 Demand for Electricity Backfill Forecast"
+format:
+  html:
+    code-fold: false
+jupyter: python3
+---
+
+
+Load Libraries
+
+```{python}
+import pandas as pd
+import json
+import etl.forecast_utils as fu
+import pointblank as pb
+import etl.callable as cl
+```
+
+
+
+Load Settings
+
+```{python}
+settings_path = "./settings/settings.json"
+save = True
+initial = False 
+
+raw_json = open(settings_path)
+settings = json.load(raw_json)
+```
+
+
+```{python}
+forecast_model = settings["forecast"]["model"]
+fc_path = settings["forecast"]["settings"]["forecast_path"]
+fc_log_path = settings["forecast"]["settings"]["forecast_log_path"]
+data_path = settings["data"]["data_path"]
+data_log_path = settings["data"]["data_log_path"]
+unique_id = settings["api"]["facets"]["respondent"]
+```
+
+
+Model Settings
+
+
+```{python}
+def get_forecast_settings(settings_path):
+    raw_json = open(settings_path)
+    settings = json.load(raw_json)
+    forecast_model = settings["forecast"]["model"]
+    model = forecast_model["args"]["models"][0]
+    model_label = forecast_model["label"]
+    h = settings["forecast"]["settings"]["h"] 
+    forecast_path = settings["forecast"]["settings"]["forecast_path"]    
+    forecast_log_path = settings["forecast"]["settings"]["forecast_log_path"]
+    args = forecast_model["args"]
+    if "lags" not in args.keys():
+        args["lags"] = None
+    if "date_features" not in args.keys():
+        args["date_features"] = None
+    if "target_transforms" not in args.keys():
+        args["target_transforms"] = None
+    freq = args["freq"]
+    lags = args["lags"]
+    date_features = args["date_features"]
+    target_transforms = args["target_transforms"]
+    unique_id = settings["api"]["facets"]["respondent"]
+```
+
+```{python}
+model = forecast_model["args"]["models"][0]
+model_label = forecast_model["label"]
+h = settings["forecast"]["settings"]["h"] 
+pi = settings["forecast"]["settings"]["prediction_intervals"]
+forecast_path = settings["forecast"]["settings"]["forecast_path"]
+forecast_log_path = settings["forecast"]["settings"]["forecast_log_path"]
+args = forecast_model["args"]
+if "lags" not in args.keys():
+    args["lags"] = None
+if "date_features" not in args.keys():
+    args["date_features"] = None
+if "target_transforms" not in args.keys():
+    args["target_transforms"] = None
+freq = args["freq"]
+lags = args["lags"]
+date_features = args["date_features"]
+target_transforms = args["target_transforms"]
+
+target_transforms
+
+forecast_schema = pb.Schema(
+    columns=[
+        ("unique_id", "object"),
+        ("ds", "datetime64[ns]"),   
+        ("model_label", "object"),
+        ("forecast", "float64"),
+        ("lower", "float64"),
+        ("upper", "float64"),
+        ("forecast_label", "object")
+    ]
+)
+```
+
+
+```{python}
+s = fu.FcSettings()
+s.get_forecast_settings(settings_path=settings_path)
+s.settings
+s.settings["refresh"]
+```
+
+```{python}
+forecast_refresh = fu.RefreshForecast()
+forecast_refresh.check_status(settings_path=settings_path)
+forecast_status = forecast_refresh.status
+```
+
+
+
+```{python}
+while forecast_status:
+    print(forecast_refresh.start)
+    forecast_refresh.refresh_forecast()
+    forecast_refresh.reformat_forecast()
+    forecast_refresh.add_schema(schema= forecast_schema)
+    forecast_refresh.forecast_validation()
+    log = forecast_refresh.validation.log
+    if forecast_refresh.validation.log["status"]:
+        af = fu.AppendForecast()
+        af.append_forecast(settings_path=settings_path, new_fc = forecast_refresh.forecast, schema = forecast_schema,save = save, initial= initial)
+
+    if af.save:
+        if af.status:
+            log["update"] = True
+        else:
+            log["update"] = False
+            log["comments"] = "Failed to append the forecast, please check the validation log"
+        al = fu.AppendFcLog()
+        al.append_log(settings_path=settings_path, new_log = log, save = save, initial = initial)   
+    else:
+        print("The save argument was set to False, skipping the log process")
+
+    forecast_refresh = fu.RefreshForecast()
+    forecast_refresh.check_status(settings_path=settings_path)
+    forecast_status = forecast_refresh.status
+
+    
+```
+## Score Forecast
+
+
+```{python}
+cl.score(settings_path=settings_path, save = save)
+```
