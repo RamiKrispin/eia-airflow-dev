@@ -6,5 +6,8 @@
     "editor.fontLigatures": true,
     "editor.lineNumbers": "relative",
     "breadcrumbs.filePath":"on",
-    "breadcrumbs.symbolPath":"on"
+    "breadcrumbs.symbolPath": "on",
+    "cSpell.words": [
+        "megawatthours"
+    ]
 }

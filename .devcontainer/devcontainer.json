@@ -37,7 +37,8 @@
                 "streetsidesoftware.code-spell-checker",
                 "adpyke.codesnap",
                 // Code generator
-                "github.copilot"
+                "github.copilot",
+                "continue.continue"
             ]
         }
     },
